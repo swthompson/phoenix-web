@@ -102,11 +102,21 @@
   };
   spawn();
 
-  const drawHUD=()=>{
-    ctx.fillStyle="#FFF";
-    for(let i=0;i<player.hp;i++)ctx.fillRect(10+i*8,10,6,4);
-    ctx.font="10px monospace";ctx.textAlign="right";ctx.fillText(score,canvas.width-10,18);ctx.textAlign="left";ctx.fillText("Stage "+stage,10,28);
-  };
+  const drawHUD = () => {
+  ctx.fillStyle = "#FFF";
+  // health hearts (upper‑left)
+  for (let i = 0; i < player.hp; i++) ctx.fillRect(10 + i * 8, 10, 6, 4);
+
+  // score (upper‑right)
+  ctx.font = "10px monospace";
+  ctx.textAlign = "right";
+  ctx.fillText("Score: " + score, canvas.width - 10, 18);
+
+  // stage label (below health)
+  ctx.textAlign = "left";
+  ctx.fillText("Stage " + stage, 10, 28);
+};
+
   const drawMsg=()=>{
     ctx.fillStyle="#FFF";ctx.font="10px monospace";ctx.textAlign="center";
     if(stageDone){ctx.fillText("STAGE "+stage+" CLEAR",canvas.width/2,canvas.height/2-10);const up=WEAPONS[Math.min(player.weapon+1,WEAPONS.length-1)].name;ctx.fillText("Weapon Upgrade: "+up,canvas.width/2,canvas.height/2+4);}
