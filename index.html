@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Phoenix Web</title>
+  <style>
+    html,body{margin:0;background:#000;display:flex;justify-content:center;align-items:center;height:100vh;}
+    canvas{width:90vmin;height:90vmin;border:1px solid #666;image-rendering:pixelated;touch-action:none;}
+  </style>
+</head>
+<body>
+  <canvas id="game" width="256" height="384"></canvas>
+  <script>
+  const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+  ctx.imageSmoothingEnabled=false;
+  const rand=(a,b)=>a+Math.random()*(b-a);
+
+  /* input */
+  const KEY={LEFT:false,RIGHT:false,SPACE:false,ENTER:false};
+  addEventListener('keydown',e=>{if(e.code==="ArrowLeft")KEY.LEFT=true;if(e.code==="ArrowRight")KEY.RIGHT=true;if(e.code==="Space")KEY.SPACE=true;if(e.code==="Enter")KEY.ENTER=true;});
+  addEventListener('keyup',e=>{if(e.code==="ArrowLeft")KEY.LEFT=false;if(e.code==="ArrowRight")KEY.RIGHT=false;if(e.code==="Space")KEY.SPACE=false;if(e.code==="Enter")KEY.ENTER=false;});
+
+  let touches=[];
+  const syncTouches=e=>{
+    const r=canvas.getBoundingClientRect();
+    touches=[...e.touches].map(t=>({x:(t.clientX-r.left)*canvas.width/r.width,y:(t.clientY-r.top)*canvas.height/r.height}));
+  };
+  ["touchstart","touchmove","touchend","touchcancel"].forEach(ev=>canvas.addEventListener(ev,e=>{e.preventDefault();syncTouches(e);},{passive:false}));
+
+  /* entities */
+  class Explosion{
+    constructor(x,y){this.x=x;this.y=y;this.t=30;}
+    update(){this.t--;}
+    draw(){ctx.strokeStyle="#FFF";for(let i=0;i<8;i++){const a=i*Math.PI/4,l=(30-this.t)*0.6;ctx.beginPath();ctx.moveTo(this.x,this.y);ctx.lineTo(this.x+Math.cos(a)*l,this.y+Math.sin(a)*l);ctx.stroke();}}
+  }
+
+  class Bullet{
+    constructor(x,y,vx,vy,enemy=false){this.x=x;this.y=y;this.vx=vx;this.vy=vy;this.enemy=enemy;this.r=2;this.active=true;}
+    update(){this.x+=this.vx;this.y+=this.vy;if(this.x<-10||this.x>canvas.width+10||this.y<-10||this.y>canvas.height+10)this.active=false;}
+    draw(){ctx.fillStyle="#FFF";ctx.fillRect(this.x-this.r,this.y-this.r,this.r*2,this.r*2);}
+  }
+
+  class Player{
+    constructor(){this.w=16;this.h=8;this.baseY=canvas.height-20;this.reset();}
+    reset(){this.x=canvas.width/2;this.y=this.baseY;this.hp=3;this.alive=true;this.hit=0;this.cool=0;this.weapon=0;this.expl=null;}
+    update(shoot){
+      if(!this.alive){this.expl&&this.expl.update();return;}
+      if(touches.length)this.x=touches[0].x;else{if(KEY.LEFT)this.x-=2;if(KEY.RIGHT)this.x+=2;}
+      this.x=Math.max(this.w/2,Math.min(canvas.width-this.w/2,this.x));
+      const w=WEAPONS[this.weapon];
+      if(shoot&&this.cool<=0){w.pattern.forEach(p=>bullets.push(new Bullet(this.x+p.ox,this.y-6,p.vx,p.vy)));this.cool=w.rate;}
+      if(this.cool>0)this.cool--;if(this.hit>0)this.hit--;
+    }
+    damage(){if(!this.alive)return;this.hp--;this.hit=20;if(this.hp<=0){this.alive=false;this.expl=new Explosion(this.x,this.y);}}
+    draw(){if(this.alive){if(this.hit%4<2){ctx.fillStyle="#FFF";ctx.fillRect(this.x-this.w/2,this.y-this.h/2,this.w,this.h);ctx.fillRect(this.x-2,this.y-this.h/2-2,4,2);}}else this.expl&&this.expl.draw();}
+  }
+
+  const MAX_DESCENT=200;
+  class Enemy{
+    constructor(x,y,type,stage){this.x=x;this.y=y;this.type=type;this.stage=stage;this.t=0;this.r=6;this.active=true;this.panic=false;this.resetFire();this.setPanicVel();}
+    resetFire(){const base=200-25*this.stage;this.fire= Math.max(15,rand(base*0.5,base));}
+    setPanicVel(){this.vxP=rand(-2,2);this.vyP=rand(-0.4,0.8);}
+    update(canShoot,panic){
+      this.t++;if(panic)this.panic=true;
+      if(this.panic){if(this.t%60===0)this.setPanicVel();this.x+=this.vxP;this.y+=this.vyP;if(this.x<10||this.x>canvas.width-10)this.vxP*=-1;if(this.y<20)this.vyP=Math.abs(this.vyP);if(this.y>MAX_DESCENT)this.vyP*=-1;}
+      else{const b=BEHAV[this.type];this.x+=b.vx(this.t);this.y+=b.vy(this.t);if(this.y>MAX_DESCENT)this.y=MAX_DESCENT;}
+      if(canShoot){this.fire--;if(this.fire<=0){const s=1.2+0.3*this.stage;bullets.push(new Bullet(this.x,this.y+6,0,s,true));this.resetFire();}}
+      if(this.y>canvas.height+30)this.active=false;
+    }
+    draw(){ctx.strokeStyle="#FFF";ctx.strokeRect(this.x-this.r,this.y-this.r,this.r*2,this.r*2);}
+  }
+
+  /* config */
+  const WEAPONS=[
+    {name:"Single",rate:12,pattern:[{ox:0,vx:0,vy:-3}]},
+    {name:"Double",rate:10,pattern:[{ox:-4,vx:0,vy:-3},{ox:4,vx:0,vy:-3}]},
+    {name:"Triple",rate:10,pattern:[{ox:0,vx:0,vy:-3},{ox:-4,vx:-0.6,vy:-3},{ox:4,vx:0.6,vy:-3}]},
+    {name:"Quad",rate:8,pattern:[{ox:-6,vx:0,vy:-3},{ox:-2,vx:-0.4,vy:-3},{ox:2,vx:0.4,vy:-3},{ox:6,vx:0,vy:-3}]},
+    {name:"Fan",rate:6,pattern:[{ox:0,vx:0,vy:-3},{ox:-8,vx:-0.8,vy:-3},{ox:8,vx:0.8,vy:-3},{ox:-4,vx:-0.4,vy:-3},{ox:4,vx:0.4,vy:-3}]},
+    {name:"Storm",rate:4,pattern:[{ox:0,vx:0,vy:-3},{ox:-6,vx:-0.6,vy:-3},{ox:6,vx:0.6,vy:-3},{ox:-3,vx:-0.3,vy:-3},{ox:3,vx:0.3,vy:-3}]}
+  ];
+  const BEHAV=[
+    {vx:t=>0.5*Math.sin(t/40),vy:t=>0.3},
+    {vx:t=>Math.sin(t/20),vy:t=>0.4},
+    {vx:t=>0,vy:t=>0.5},
+    {vx:t=>Math.cos(t/15),vy:t=>0.45},
+    {vx:t=>Math.sin(t/10)*1.5,vy:t=>0.55},
+    {vx:t=>Math.sin(t/8)*2,vy:t=>0.6}
+  ];
+
+  /* game state */
+  const bullets=[];const player=new Player();
+  let enemies=[],initialEnemies=0;
+  let stage=0,frame=0,waveFrame=0,constGrace=120;
+  let stageDone=false,gameOver=false,msg=0,help=300,score=0,allowRestart=false;
+  const PANIC=0.3;
+
+  const spawn=()=>{
+    enemies=[];const cols=6+stage,rows=2+Math.floor(stage/2);
+    for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){const x=30+c*30-rand(0,5),y=20+r*-30,type=Math.min(stage,BEHAV.length-1);enemies.push(new Enemy(x,y,type,stage));}
+    initialEnemies=enemies.length;waveFrame=0;
+  };
+  spawn();
+
+  const drawHUD=()=>{
+    ctx.fillStyle="#FFF";
+    for(let i=0;i<player.hp;i++)ctx.fillRect(10+i*8,10,6,4);
+    ctx.font="10px monospace";ctx.textAlign="right";ctx.fillText(score,canvas.width-10,18);ctx.textAlign="left";ctx.fillText("Stage "+stage,10,28);
+  };
+  const drawMsg=()=>{
+    ctx.fillStyle="#FFF";ctx.font="10px monospace";ctx.textAlign="center";
+    if(stageDone){ctx.fillText("STAGE "+stage+" CLEAR",canvas.width/2,canvas.height/2-10);const up=WEAPONS[Math.min(player.weapon+1,WEAPONS.length-1)].name;ctx.fillText("Weapon Upgrade: "+up,canvas.width/2,canvas.height/2+4);}
+    if(gameOver){ctx.fillText("GAME OVER",canvas.width/2,canvas.height/2-10);ctx.fillText("Score: "+score,canvas.width/2,canvas.height/2+4);ctx.fillText("Tap / Enter / Space to Restart",canvas.width/2,canvas.height/2+18);}
+  };
+  const drawHelp=()=>{ctx.fillStyle="#FFF";ctx.font="8px monospace";ctx.textAlign="center";ctx.fillText("Drag to move • Hold 2nd finger or Space to fire",canvas.width/2,canvas.height/2-8);ctx.fillText("Arrow keys also work",canvas.width/2,canvas.height/2+4);};
+
+  const reset=()=>{score=0;stage=0;player.reset();bullets.length=0;gameOver=false;stageDone=false;help=300;spawn();};
+
+  canvas.addEventListener("click",()=>{if(gameOver&&allowRestart)reset();});
+
+  const loop=()=>{
+    requestAnimationFrame(loop);ctx.fillStyle="#000";ctx.fillRect(0,0,canvas.width,canvas.height);frame++;
+    const shoot=KEY.SPACE||touches.length>1;
+    if(!stageDone&&!gameOver){
+      player.update(shoot);waveFrame++;const canShoot=waveFrame>constGrace;const panic=enemies.length<=initialEnemies*PANIC;enemies.forEach(e=>e.update(canShoot,panic));
+    }else player.update(false);
+    bullets.forEach(b=>b.update());
+    /* collisions */
+    bullets.forEach(b=>{
+      if(!b.active)return;
+      if(b.enemy&&player.alive&&Math.hypot(player.x-b.x,player.y-b.y)<player.w/2){b.active=false;player.damage();if(!player.alive){gameOver=true;msg=180;allowRestart=false;}}
+      else if(!b.enemy){
+        for(const e of enemies){if(e.active&&Math.hypot(e.x-b.x,e.y-b.y)<e.r){b.active=false;e.active=false;score+=100+stage*50;break;}}
+      }
+    });
+    enemies=enemies.filter(e=>e.active);bullets.forEach((b,i)=>{if(!b.active)bullets.splice(i,1);});
+    if(!stageDone&&enemies.length===0){stageDone=true;msg=150;}
+
+    /* draw */
+    player.draw();enemies.forEach(e=>e.draw());bullets.forEach(b=>b.draw());drawHUD();if(help>0){drawHelp();help--;}if(stageDone||gameOver){drawMsg();if(--msg<=0){if(stageDone){stage++;if(stage>5)stage=5;player.weapon=Math.min(stage,WEAPONS.length-1);stageDone=false;spawn();}else if(gameOver){allowRestart=true;}}}
+    if(gameOver&&allowRestart&&(KEY.ENTER||KEY.SPACE))reset();
+  };
+  loop();
+  </script>
+</body>
+</html>
