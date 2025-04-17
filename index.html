@@ -93,6 +93,8 @@
   let enemies=[],initialEnemies=0;
   let stage=0,frame=0,waveFrame=0,constGrace=120;
   let stageDone=false,gameOver=false,msg=0,help=300,score=0,allowRestart=false;
+  let highScore = 0;
+
   const PANIC=0.3;
 
   const spawn=()=>{
@@ -128,28 +130,99 @@
 
   canvas.addEventListener("click",()=>{if(gameOver&&allowRestart)reset();});
 
-  const loop=()=>{
-    requestAnimationFrame(loop);ctx.fillStyle="#000";ctx.fillRect(0,0,canvas.width,canvas.height);frame++;
-    const shoot=KEY.SPACE||touches.length>1;
-    if(!stageDone&&!gameOver){
-      player.update(shoot);waveFrame++;const canShoot=waveFrame>constGrace;const panic=enemies.length<=initialEnemies*PANIC;enemies.forEach(e=>e.update(canShoot,panic));
-    }else player.update(false);
-    bullets.forEach(b=>b.update());
-    /* collisions */
-    bullets.forEach(b=>{
-      if(!b.active)return;
-      if(b.enemy&&player.alive&&Math.hypot(player.x-b.x,player.y-b.y)<player.w/2){b.active=false;player.damage();if(!player.alive){gameOver=true;msg=180;allowRestart=false;}}
-      else if(!b.enemy){
-        for(const e of enemies){if(e.active&&Math.hypot(e.x-b.x,e.y-b.y)<e.r){b.active=false;e.active=false;score+=100+stage*50;break;}}
-      }
-    });
-    enemies=enemies.filter(e=>e.active);bullets.forEach((b,i)=>{if(!b.active)bullets.splice(i,1);});
-    if(!stageDone&&enemies.length===0){stageDone=true;msg=150;}
+  const loop = () => {
+  requestAnimationFrame(loop);
 
-    /* draw */
-    player.draw();enemies.forEach(e=>e.draw());bullets.forEach(b=>b.draw());drawHUD();if(help>0){drawHelp();help--;}if(stageDone||gameOver){drawMsg();if(--msg<=0){if(stageDone){stage++;if(stage>5)stage=5;player.weapon=Math.min(stage,WEAPONS.length-1);stageDone=false;spawn();}else if(gameOver){allowRestart=true;}}}
-    if(gameOver&&allowRestart&&(KEY.ENTER||KEY.SPACE))reset();
-  };
+  /* clear screen */
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  frame++;
+
+  /* input state */
+  const shooting = KEY.SPACE || touches.length > 1;
+
+  /* GAME UPDATE */
+  if (!stageDone && !gameOver) {
+    player.update(shooting);
+
+    waveFrame++;
+    const canShoot = waveFrame > constGrace;
+    const panic = enemies.length <= initialEnemies * PANIC;
+
+    enemies.forEach(e => e.update(canShoot, panic));
+  } else {
+    player.update(false);
+  }
+
+  bullets.forEach(b => b.update());
+
+  /* COLLISIONS */
+  bullets.forEach(b => {
+    if (!b.active) return;
+
+    if (
+      b.enemy &&
+      player.alive &&
+      Math.hypot(player.x - b.x, player.y - b.y) < player.w / 2
+    ) {
+      b.active = false;
+      player.damage();
+      if (!player.alive) {
+        gameOver = true;
+        msg = 180;
+        allowRestart = false;
+      }
+    } else if (!b.enemy) {
+      for (const e of enemies) {
+        if (e.active && Math.hypot(e.x - b.x, e.y - b.y) < e.r) {
+          b.active = false;
+          e.active = false;
+          score += 100 + stage * 50;
+          break;
+        }
+      }
+    }
+  });
+
+  enemies = enemies.filter(e => e.active);
+  bullets = bullets.filter(b => b.active);
+
+  if (!stageDone && enemies.length === 0) {
+    stageDone = true;
+    msg = 150;
+  }
+
+  /* RENDER */
+  player.draw();
+  enemies.forEach(e => e.draw());
+  bullets.forEach(b => b.draw());
+  drawHUD();
+
+  if (help > 0) {
+    drawHelp();
+    help--;
+  }
+
+  if (stageDone || gameOver) {
+    if (gameOver && score > highScore) highScore = score; // update HS
+    drawMsg();
+
+    if (--msg <= 0) {
+      if (stageDone) {
+        stage++;
+        if (stage > 5) stage = 5;
+        player.weapon = Math.min(stage, WEAPONS.length - 1);
+        stageDone = false;
+        spawn();
+      } else if (gameOver) {
+        allowRestart = true;
+      }
+    }
+  }
+
+  /* restart key */
+  if (gameOver && allowRestart && (KEY.ENTER || KEY.SPACE)) reset();
+};
   loop();
   </script>
 </body>
